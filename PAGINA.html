@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Juego Scratch: Clasifica bloques</title>
+<style>
+:root {--bg:#f6f8fb;--card:#fff;--accent:#1e88e5;--muted:#6b7280;}
+*{box-sizing:border-box;}
+body{font-family:Inter,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial;margin:0;background:var(--bg);color:#0f172a;}
+.wrap{max-width:1100px;margin:20px auto;padding:15px;}
+header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;}
+h1{font-size:18px;margin:0;}
+p.lead{margin:4px 0 0;color:var(--muted);font-size:14px;}
+.game{display:grid;grid-template-columns:1fr 320px;gap:16px;margin-top:16px;}
+.board{background:linear-gradient(180deg,#ffffff,#fbfdff);padding:16px;border-radius:10px;box-shadow:0 4px 12px rgba(8,15,25,0.06);}
+.palette{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;}
+.block{padding:8px;border-radius:8px;border:1px solid #eef2f7;cursor:grab;user-select:none;color:#fff;font-weight:600;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:50px;font-size:1rem;transition:transform 0.2s;word-break:break-word;}
+.block[data-cat="Movimiento"]{background:#4C97FF;}
+.block[data-cat="Control"]{background:#FFAB19;}
+.block[data-cat="Sensores"]{background:#5CB1D6;}
+.block[data-cat="Apariencia"]{background:#9966FF;}
+.block[data-cat="Sonido"]{background:#CF63CF;}
+.block[data-cat="Operadores"]{background:#59C059;}
+.block.correct{background:#4caf50; transform:scale(1.05);}
+.block.wrong{background:#f44336; transform:scale(1.05);}
+.block .tag{display:inline-block;padding:2px 6px;border-radius:999px;font-size:10px;background:rgba(255,255,255,0.2);color:#fff;margin-bottom:4px;visibility:hidden;}
+.bin{min-height:70px;padding:12px;border-radius:12px;background:#f8fafc;border:2px dashed #e2e8f0;display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start;justify-content:center;}
+.bin h3{width:100%;font-size:14px;margin:0 0 6px 0;color:var(--muted);text-align:center;}
+.panel{background:var(--card);padding:10px;border-radius:10px;border:1px solid #eef2f7;}
+.buttons{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;}
+button{border:0;padding:6px 10px;border-radius:6px;background:var(--accent);color:white;font-weight:600;cursor:pointer;font-size:12px;}
+button.ghost{background:white;color:var(--accent);border:1px solid #dbeafe;}
+.small{font-size:12px;}
+.stats{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+.chip{background:#eef2ff;padding:5px 8px;border-radius:999px;font-weight:600;font-size:12px;}
+#timer{font-size:12px;color:green;}
+#resultPanel{margin-top:10px;padding:10px;border-radius:10px;background:#FFAB19;color:#fff;display:none;box-shadow:0 4px 10px rgba(0,0,0,0.1);font-size:12px;text-align:center;}
+.bins-container{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:10px;}
+@media(max-width:800px){.game{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div>
+    <h1>Juego de Scratch: Clasifica los bloques</h1>
+    </div>
+  <div class="stats">
+    <div class="chip" id="score">Puntos: 0</div>
+    <div class="chip small" id="timer">Tiempo: 02:00</div>
+  </div>
+</header>
+
+<div class="game">
+<section class="board">
+  <div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap">
+    <div style="flex:1">
+      <h3 style="margin:0 0 10px 0">Paleta de bloques</h3>
+      <div class="palette" id="palette"></div>
+    </div>
+    <div style="width:200px">
+      <div class="panel controls">
+        <strong>Controles</strong>
+        <div class="buttons">
+          <button class="ghost" id="hint">Pista</button>
+          <button class="ghost" id="reset" style="display:none">Reiniciar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <hr style="margin:10px 0;border:none;border-top:1px solid #eef2f6" />
+
+  <div class="bins-container" id="binsContainer"></div>
+
+  <div id="resultPanel"></div>
+</section>
+
+<aside>
+  <div class="panel">
+    <strong>Instrucciones</strong>
+    <ol style="margin-top:6px;padding-left:16px;color:var(--muted)">
+      <li>Arrastra cada bloque a la categoría correcta.</li>
+      <li>Pulsa "Pista" para ver un bloque con su categoría.</li>
+      <li>Pulsa "Comprobar" para ver cuántos aciertos y errores tuviste.</li>
+    </ol>
+  </div>
+  <div class="panel" style="margin-top:8px">
+    <div class="buttons">
+      <button id="check">Comprobar</button>
+    </div>
+  </div>
+</aside>
+</div>
+</div>
+
+<audio id="dragSound" src="https://actions.google.com/sounds/v1/cartoon/slide_whistle.ogg" preload="auto"></audio>
+<audio id="dropSound" src="https://actions.google.com/sounds/v1/cartoon/pop.ogg" preload="auto"></audio>
+
+<script>
+document.addEventListener('DOMContentLoaded', ()=>{
+  const BLOCKS = [
+    {id:'b1',text:'mover 10 pasos',cat:'Movimiento'},
+    {id:'b2',text:'girar 15 grados',cat:'Movimiento'},
+    {id:'b3',text:'ir a x: y:',cat:'Movimiento'},
+    {id:'b4',text:'decir "Hola" por 2 segundos',cat:'Apariencia'},
+    {id:'b5',text:'cambiar disfraz a',cat:'Apariencia'},
+    {id:'b6',text:'tocar sonido (pop)',cat:'Sonido'},
+    {id:'b7',text:'detener todo',cat:'Control'},
+    {id:'b8',text:'esperar 1 segundo',cat:'Control'},
+    {id:'b9',text:'repetir 10',cat:'Control'},
+    {id:'b10',text:'si <tocando color>',cat:'Sensores'},
+    {id:'b11',text:'preguntar y esperar',cat:'Sensores'},
+    {id:'b12',text:'operador suma  a + b',cat:'Operadores'},
+    {id:'b13',text:'aleatorio entre 1 y 10',cat:'Operadores'},
+    {id:'b14',text:'tocar nota (60) por 0.5 tiempos',cat:'Sonido'},
+    {id:'b15',text:'mostrar',cat:'Apariencia'}
+  ];
+
+  const palette = document.getElementById('palette');
+  const binsContainer = document.getElementById('binsContainer');
+  const scoreEl = document.getElementById('score');
+  const timerEl = document.getElementById('timer');
+  const resultPanel = document.getElementById('resultPanel');
+  const checkBtn = document.getElementById('check');
+  const resetBtn = document.getElementById('reset');
+  const hintBtn = document.getElementById('hint');
+  const dragSound = document.getElementById('dragSound');
+  const dropSound = document.getElementById('dropSound');
+
+  const BIN_CATEGORIES = ['Movimiento','Control','Sensores','Apariencia','Sonido','Operadores'];
+  let timerInterval=null;
+  let totalTime=120;
+  let startTime=null;
+  let timerRunning=false;
+
+  function shuffleArray(arr){for(let i=arr.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[arr[i],arr[j]]=[arr[j],arr[i]];}}
+
+  function createBins(){
+    binsContainer.innerHTML='';
+    const shuffled = [...BIN_CATEGORIES];
+    shuffleArray(shuffled);
+    shuffled.forEach(cat=>{
+      const div = document.createElement('div');
+      div.className='bin';
+      div.id='bin-'+cat;
+      div.dataset.category=cat;
+      div.innerHTML=`<h3>${cat}</h3>`;
+      binsContainer.appendChild(div);
+
+      div.addEventListener('dragover', e=>e.preventDefault());
+      div.addEventListener('drop', e=>{
+        e.preventDefault();
+        const id = e.dataTransfer.getData('text/plain');
+        const el = document.getElementById(id);
+        if(!el) return;
+        div.appendChild(el);
+        dropSound.play();
+      });
+    });
+  }
+
+  function renderPalette(){
+    palette.innerHTML='';
+    shuffleArray(BLOCKS);
+    BLOCKS.forEach(b=>{
+      const div = document.createElement('div');
+      div.className='block';
+      div.draggable=true;
+      div.id=b.id;
+      div.dataset.cat=b.cat;
+      div.innerHTML=`<div class="tag">${b.cat}</div><div>${b.text}</div>`;
+      div.querySelector('.tag').style.visibility='hidden';
+      div.addEventListener('dragstart', e => {
+        e.dataTransfer.setData('text/plain', e.target.id);
+        dragSound.play();
+      });
+      palette.appendChild(div);
+    });
+  }
+
+  function resetBins(){
+    const bins = document.querySelectorAll('.bin');
+    bins.forEach(bin=>{
+      Array.from(bin.querySelectorAll('.block')).forEach(b=>{
+        palette.appendChild(b);
+        b.classList.remove('correct','wrong');
+        b.querySelector('.tag').style.visibility='hidden';
+      });
+    });
+  }
+
+  function startTimer(){
+    if(timerInterval) clearInterval(timerInterval);
+    startTime = Date.now();
+    timerRunning = true;
+    updateTimer();
+    timerInterval = setInterval(updateTimer,1000);
+  }
+
+  function updateTimer(){
+    if(!timerRunning) return;
+    const elapsed = Math.floor((Date.now()-startTime)/1000);
+    const remaining = totalTime - elapsed;
+    const mm = String(Math.floor(remaining/60)).padStart(2,'0');
+    const ss = String(remaining%60).padStart(2,'0');
+    timerEl.textContent='Tiempo: '+mm+':'+ss;
+    if(remaining<=30) timerEl.style.color='red';
+    else if(remaining<=60) timerEl.style.color='orange';
+    else timerEl.style.color='green';
+    if(remaining<=0){
+      clearInterval(timerInterval);
+      timerRunning=false;
+      checkAnswers(true);
+      resetBtn.style.display='inline-block';
+    }
+  }
+
+  function checkAnswers(fromTimer=false){
+    const bins = document.querySelectorAll('.bin');
+    let totalBlocks = BLOCKS.length;
+    let correct=0, wrong=0, placed=0;
+
+    bins.forEach(bin=>{
+      const cat = bin.dataset.category;
+      Array.from(bin.querySelectorAll('.block')).forEach(b=>{
+        b.querySelector('.tag').style.visibility='visible';
+        placed++;
+        if(b.dataset.cat===cat){ correct++; b.classList.add('correct'); }
+        else { wrong++; b.classList.add('wrong'); }
+      });
+    });
+
+    wrong += totalBlocks - placed; // bloques no colocados cuentan como errores
+
+    if(placed===0 && !fromTimer){
+      alert("No has agregado bloques a las cajas!");
+      return;
+    }
+
+    timerRunning=false;
+    
+    let score = (correct / totalBlocks) * 100;
+    if(score>100) score=100;
+    scoreEl.textContent='Puntos: '+Math.round(score);
+
+    resultPanel.innerHTML=`<strong>Aciertos: ${correct}</strong> <br><strong>Errores: ${wrong}</strong>`;
+    resultPanel.style.display='block';
+    resetBtn.style.display='inline-block';
+  }
+
+  function giveHint(){
+    const remainingBlocks = Array.from(palette.querySelectorAll('.block'));
+    if(remainingBlocks.length===0) return;
+    const candidate = remainingBlocks[Math.floor(Math.random()*remainingBlocks.length)];
+    const tag = candidate.querySelector('.tag');
+    tag.style.visibility='visible';
+    candidate.animate([{transform:'scale(1)'},{transform:'scale(1.1)'},{transform:'scale(1)'}],{duration:700});
+    setTimeout(()=>{if(candidate.parentElement.id==='palette') tag.style.visibility='hidden';},3000);
+  }
+
+  palette.addEventListener('dragover', e=>e.preventDefault());
+  palette.addEventListener('drop', e=>{
+    e.preventDefault();
+    const id = e.dataTransfer.getData('text/plain');
+    const el = document.getElementById(id);
+    if(!el) return;
+    palette.appendChild(el);
+    dropSound.play();
+  });
+
+  resetBtn.addEventListener('click', ()=>{
+    renderPalette();
+    createBins();
+    resetBins();
+    resultPanel.style.display='none';
+    scoreEl.textContent='Puntos: 0';
+    resetBtn.style.display='none';
+    totalTime = 120;
+    startTimer();
+  });
+
+  checkBtn.addEventListener('click', ()=>checkAnswers(false));
+  hintBtn.addEventListener('click', giveHint);
+
+  renderPalette();
+  createBins();
+  resetBins();
+  resultPanel.style.display='none';
+  startTimer();
+});
+</script>
+</body>
+</html>
